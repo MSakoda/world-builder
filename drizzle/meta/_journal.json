@@ -8,6 +8,13 @@
       "when": 1786590080035,
       "tag": "0000_complete_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786670908449,
+      "tag": "0001_unusual_captain_cross",
+      "breakpoints": true
     }
   ]
 }

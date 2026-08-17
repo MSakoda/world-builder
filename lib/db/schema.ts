@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, integer, primaryKey, uuid, jsonb, timestamp } from "drizzle-orm/pg-core";
 
 // (Marcus): define rooms, exits, items, room_items.
 //
@@ -39,3 +39,12 @@ export const exits = pgTable('exits', {
 })
 // Reference for fk/pk syntax: node_modules/drizzle-orm/pg-core (or the
 // Drizzle docs) for `.references(() => otherTable.column)`.
+export const runs = pgTable('runs', {
+    id: uuid("id").defaultRandom().primaryKey(),
+    session_id: text('session_id').notNull().unique(),
+    current_room_id: text("current_room_id").notNull().references(() => rooms.id),
+    inventory: jsonb("inventory").notNull(),
+    flags: jsonb("flags").notNull(),
+    started_at: timestamp("started_at").notNull().defaultNow(),
+    last_action_at: timestamp("last_action_at").notNull().defaultNow(),
+})
