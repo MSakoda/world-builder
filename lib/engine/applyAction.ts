@@ -35,6 +35,7 @@ export function applyAction(
           }
         } else {
           result.message = `Went to ${room.exits[action.direction]?.to}`;
+          updatedState.currentRoom = room.exits[action.direction]!.to
         }   
       } else {
         result = {

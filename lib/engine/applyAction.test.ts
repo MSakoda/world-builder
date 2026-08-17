@@ -28,6 +28,13 @@ describe("applyAction", () => {
     expect(result.result.success).toBe(true);
     expect(result.state.currentRoom).toEqual('cellar');
   })
+    it('should succeed when going through an unlocked exit', () => {
+    state.inventory = ['key'];
+    let result = applyAction(state, { verb: 'go', direction: 'south'}, world )
+    result = applyAction(result.state, { verb: 'go', direction: 'north'}, world )
+    expect(result.result.success).toBe(true);
+    expect(result.state.currentRoom).toEqual('entrance');
+  })
   it('should fail when taking a non-portable item', () => {
     const result = applyAction(state, { verb: 'take', target: 'statue'}, world )
     expect(result.result.success).toBe(false);
