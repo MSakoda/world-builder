@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./client";
 import { runs } from "./schema";
 
-const STARTING_ROOM_ID = "entrance";
+export const STARTING_ROOM_ID = "entrance";
 
 export type Run = typeof runs.$inferSelect;
 

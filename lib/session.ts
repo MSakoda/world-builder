@@ -3,6 +3,15 @@ import { cookies } from "next/headers";
 const SESSION_COOKIE_NAME = "session_id";
 
 /**
+ * Safe in a Server Component — read-only, never tries to set a cookie.
+ * Returns null for a brand-new visitor with no session yet.
+ */
+export async function getSessionId(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
+}
+
+/**
  * Only callable from a Server Action or Route Handler — cookies() can't
  * set cookies during plain Server Component rendering.
  */
