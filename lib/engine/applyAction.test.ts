@@ -48,3 +48,31 @@ describe("applyAction", () => {
     expect(result.state.inventory.length).toEqual(1);
   })
 });
+
+describe("applyAction edge cases", () => {
+  const base = { currentRoom: "entrance", inventory: [], flags: {} } as GameState;
+
+  it("fails (does not throw) when taking an unknown item", () => {
+    const { result, state } = applyAction(base, { verb: "take", target: "sword" }, world);
+    expect(result.success).toBe(false);
+    expect(state).toEqual(base);
+  });
+  it("fails when taking an item that is not in the current room", () => {
+    const cellar = { ...base, currentRoom: "cellar" };
+    const { result } = applyAction(cellar, { verb: "take", target: "key" }, world);
+    expect(result.success).toBe(false);
+  });
+  it("use fails for an item you don't hold and succeeds for one you do", () => {
+    expect(applyAction(base, { verb: "use", target: "key" }, world).result.success).toBe(false);
+    const held = { ...base, inventory: ["key"] };
+    const { result, state } = applyAction(held, { verb: "use", target: "key" }, world);
+    expect(result.success).toBe(true);
+    expect(result.message).not.toBe("");
+    expect(state).toEqual(held);
+  });
+  it("fails on an unknown verb", () => {
+    const { result } = applyAction(base, { verb: "dance" } as never, world);
+    expect(result.success).toBe(false);
+    expect(result.message).not.toBe("");
+  });
+});

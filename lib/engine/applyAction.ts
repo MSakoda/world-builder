@@ -44,37 +44,40 @@ export function applyAction(
         }
       }
       break;
-    case 'take':
-      const items = room.items;
-      const itemName = world.items[action.target].name;
-      // check if there is an item
-      if( items.includes(action.target)) {
-        const haveItemAlready = updatedState.inventory.includes(action.target);
-        if( world.items[action.target].portable && !haveItemAlready ) {
-          // add it to inventory
-          updatedState.inventory = [...updatedState.inventory, action.target]
-          result.message = `Added ${itemName} to inventory.`;
-        } else {
-          // Item is not movable or already have the item
-          result = {
-            success: false,
-            message : haveItemAlready ? `You already have ${itemName}` : `${itemName} is not portable.  You could not add it to your inventory.`
-          }
-        }
+    case 'take': {
+      const item = world.items[action.target];
+      if (!item) {
+        result = { success: false, message: `There is no ${action.target} here.` };
+      } else if (!room.items.includes(action.target)) {
+        result = { success: false, message: `${item.name} does not exist in this room.` };
+      } else if (updatedState.inventory.includes(action.target)) {
+        result = { success: false, message: `You already have ${item.name}` };
+      } else if (!item.portable) {
+        result = { success: false, message: `${item.name} is not portable.  You could not add it to your inventory.` };
       } else {
-        result ={
-          success: false,
-          message:  `${itemName} does not exist in this room.`
-        }
+        updatedState.inventory = [...updatedState.inventory, action.target];
+        result.message = `Added ${item.name} to inventory.`;
       }
       break;
-    case 'use':
+    }
+    case 'use': {
+      const item = world.items[action.target];
+      if (!item) {
+        result = { success: false, message: `There is no ${action.target} here.` };
+      } else if (!state.inventory.includes(action.target)) {
+        result = { success: false, message: `You don't have ${item.name}.` };
+      } else {
+        // v1 has no item effects: exits unlock just by carrying the key.
+        result.message = `You use the ${item.name}, but nothing happens.`;
+      }
       break;
+    }
     case 'look':
       // return description of current room
       result.message = room.description;
       break;
     default:
+      result = { success: false, message: "I don't understand that." };
       break;
   }
   return { state: updatedState, result }

@@ -6,10 +6,29 @@ import { getOrCreateSessionId } from "../../../lib/session";
 import { getOrCreateRun } from "../../../lib/db/getOrCreateRun";
 import { applyAction } from "../../../lib/engine/applyAction";
 import type { Action, GameState } from "../../../lib/engine/types";
-import { generateRoomProse } from "@/lib/ai/generateRoomProse";
+
+const DIRECTIONS = ["north", "south"];
+
+function parseAction(body: unknown): Action {
+  const b = body as Record<string, unknown>;
+  if (b?.verb === "look") return { verb: "look" };
+  if (b?.verb === "go" && DIRECTIONS.includes(b.direction as string))
+    return { verb: "go", direction: b.direction as "north" | "south" };
+  if ((b?.verb === "take" || b?.verb === "use") && typeof b.target === "string")
+    return { verb: b.verb, target: b.target };
+  throw new Error("invalid action");
+}
 
 export async function POST(request: Request) {
-  const action = (await request.json()) as Action;
+  let action: Action;
+  try {
+    action = parseAction(await request.json());
+  } catch {
+    return Response.json(
+      { result: { success: false, message: "Invalid action." } },
+      { status: 400 },
+    );
+  }
 
   const sessionId = await getOrCreateSessionId();
   const run = await getOrCreateRun(sessionId);
@@ -60,8 +79,13 @@ export async function POST(request: Request) {
     }).where(eq(runs.id, locked.id))
   // 5. Return { result, state } from the transaction callback, and
   //    respond with Response.json(...) using what the transaction gave back.
-  await generateRoomProse(world.rooms[result.state.currentRoom])
   return { result: result.result, state: result.state };
   });
+  if (!txResult) {
+    return Response.json(
+      { result: { success: false, message: "Run not found." } },
+      { status: 404 },
+    );
+  }
   return Response.json(txResult);
 }
