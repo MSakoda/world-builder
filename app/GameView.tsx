@@ -106,8 +106,19 @@ export default function GameView({ initialState, world, initialRemaining }: Game
         )}
         {prose.status === "error" && (
           <>
-            <span className="text-red-600">Couldn&apos;t generate a description.</span>
+            <span className="text-red-600">{prose.message}</span>
             <button className={button} onClick={prose.retry}>
+              Retry
+            </button>
+          </>
+        )}
+        {prose.status === "busy" && (
+          <>
+            <span className="opacity-70">
+              The description service is busy
+              {prose.retryInSeconds > 0 ? ` — try again in ${prose.retryInSeconds}s.` : "."}
+            </span>
+            <button className={button} disabled={prose.retryInSeconds > 0} onClick={prose.retry}>
               Retry
             </button>
           </>
