@@ -35,6 +35,11 @@ const streamHeaders = (remaining: number) => ({
 // the delay passes. Per server instance, which is enough to avoid hammering it.
 let providerBusyUntil = 0;
 
+// Generations currently running, by room. A second request for the same room
+// (a Stop then Retry, two players arriving together) waits for the running one
+// instead of starting, and paying for, another model call.
+const inFlight = new Map<string, Promise<void>>();
+
 function busyResponse(retryAfterSeconds: number, remaining: number) {
   return Response.json(
     { code: "provider_busy", error: "The description service is busy.", retryAfter: retryAfterSeconds },
@@ -43,6 +48,18 @@ function busyResponse(retryAfterSeconds: number, remaining: number) {
       headers: { "Retry-After": String(retryAfterSeconds), "X-Generations-Remaining": String(remaining) },
     },
   );
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function latestProse(roomId: string) {
+  const [row] = await db
+    .select()
+    .from(generations)
+    .where(eq(generations.room_id, roomId))
+    .orderBy(desc(generations.created_at))
+    .limit(1);
+  return row;
 }
 
 /**
@@ -66,12 +83,15 @@ export async function GET(request: Request) {
   const sessionId = await getOrCreateSessionId();
   await getOrCreateRun(sessionId);
 
-  const [cached] = await db
-    .select()
-    .from(generations)
-    .where(eq(generations.room_id, room.id))
-    .orderBy(desc(generations.created_at))
-    .limit(1);
+  let cached = await latestProse(room.id);
+  if (!cached) {
+    const running = inFlight.get(room.id);
+    if (running) {
+      // Bounded wait, so a stuck generation can never hang this request.
+      await Promise.race([running, sleep(GENERATION_TIMEOUT_MS + 5_000)]);
+      cached = await latestProse(room.id);
+    }
+  }
   if (cached) {
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -100,6 +120,19 @@ export async function GET(request: Request) {
     );
   }
 
+  // Visible to other requests from here until generation succeeds or fails.
+  let endFlight: () => void = () => {};
+  const flight = new Promise<void>((resolve) => {
+    endFlight = () => {
+      clearTimeout(safety);
+      if (inFlight.get(room.id) === flight) inFlight.delete(room.id);
+      resolve();
+    };
+  });
+  // Backstop in case an unexpected throw skips endFlight.
+  const safety = setTimeout(() => endFlight(), GENERATION_TIMEOUT_MS + 10_000);
+  inFlight.set(room.id, flight);
+
   let settled = false; // true once the prose is saved or the slot is refunded
   const release = async () => {
     if (settled) return;
@@ -111,6 +144,7 @@ export async function GET(request: Request) {
     const failure = classifyProviderError(error);
     if (failure.kind === "busy") providerBusyUntil = Date.now() + failure.retryAfterSeconds * 1000;
     await release();
+    endFlight();
     return failure;
   };
 
@@ -200,6 +234,7 @@ export async function GET(request: Request) {
         referenced_items: final.referencedItems,
       });
       settled = true;
+      endFlight();
       push(STREAM_END);
     } catch (err) {
       console.error("prose stream failed:", err);
