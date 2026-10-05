@@ -3,7 +3,7 @@ import { generateText } from "ai";
 import { z } from "zod";
 import type { Room } from "../engine/types";
 
-const roomProseSchema = z.object({
+export const roomProseSchema = z.object({
   prose: z.string().min(1),
   mood: z.enum(["tense", "calm", "eerie"]),
   referencedItems: z.array(z.string()),
@@ -12,7 +12,7 @@ export type RoomProse = z.infer<typeof roomProseSchema>;
 
 export const PROSE_MODEL = "gemini-flash-lite-latest";
 
-function buildPrompt(room: Room): string {
+export function buildPrompt(room: Room): string {
   const { description, title, items, exits } = room;
   return (
     `Using the following facts about this room, write a more detailed description in 2-3 sentences. ` +

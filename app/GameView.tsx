@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { GameState, World, Action, ActionResult, Direction } from "../lib/engine/types";
-import type { RoomProse } from "../lib/ai/generateRoomProse";
+import { MAX_GENERATIONS_PER_SESSION } from "../lib/ai/limits";
+import { useRoomProse } from "./useRoomProse";
 import { applyAction } from "@/lib/engine/applyAction";
 
 type ActionResponse = { result: ActionResult; state: GameState };
@@ -14,6 +15,7 @@ const GAME_STATE_KEY = ["gameState"];
 type GameViewProps = {
   initialState: GameState;
   world: World;
+  initialRemaining: number;
 };
 
 type Feedback = { text: string; ok: boolean } | null;
@@ -21,7 +23,7 @@ type Feedback = { text: string; ok: boolean } | null;
 const button =
   "border rounded cursor-pointer px-2 py-1 disabled:cursor-not-allowed disabled:opacity-25";
 
-export default function GameView({ initialState, world }: GameViewProps) {
+export default function GameView({ initialState, world, initialRemaining }: GameViewProps) {
   const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState<Feedback>(null);
 
@@ -34,18 +36,11 @@ export default function GameView({ initialState, world }: GameViewProps) {
 
   const room = world.rooms[state.currentRoom];
 
-  // AI prose is fetched separately so a slow model call never blocks an action.
-  // Until it arrives (or if it fails) the hand-authored description is shown.
-  const { data: prose, isFetching: proseLoading } = useQuery({
-    queryKey: ["roomProse", state.currentRoom],
-    queryFn: async () => {
-      const res = await fetch(`/api/prose?room=${encodeURIComponent(state.currentRoom)}`);
-      if (!res.ok) throw new Error("prose request failed");
-      return (await res.json()) as RoomProse;
-    },
-    staleTime: Infinity,
-    retry: false,
-  });
+  // AI prose streams in separately so it never blocks an action. The
+  // hand-authored description shows until text arrives, or if generation
+  // fails, is stopped, or hits the session cap.
+  const prose = useRoomProse(state.currentRoom, initialRemaining);
+  const showStreamed = prose.status === "streaming" || prose.status === "done";
 
   const mutation = useMutation({
     mutationFn: async (action: Action) => {
@@ -90,11 +85,37 @@ export default function GameView({ initialState, world }: GameViewProps) {
   return (
     <div className="text-center mt-5">
       <h1 className="text-xl">{room.title}</h1>
-      <p className="text-lg mt-2 mx-auto max-w-prose">{prose?.prose ?? room.description}</p>
-      {proseLoading && !prose && (
-        <p className="text-xs opacity-50 mt-1">The room comes into focus…</p>
-      )}
-      {prose && <p className="text-xs opacity-50 mt-1">Mood: {prose.mood}</p>}
+      <p className="text-lg mt-2 mx-auto max-w-prose" aria-busy={prose.status === "streaming"}>
+        {showStreamed && prose.text ? prose.text : room.description}
+      </p>
+      <div className="mt-1 text-xs flex justify-center items-center gap-2">
+        {prose.status === "streaming" && (
+          <>
+            <span className="opacity-50">
+              {prose.text ? "Writing…" : "The room comes into focus…"}
+            </span>
+            <button className={button} onClick={prose.stop}>
+              Stop
+            </button>
+          </>
+        )}
+        {prose.status === "stopped" && (
+          <button className={button} onClick={prose.retry}>
+            Generate again
+          </button>
+        )}
+        {prose.status === "error" && (
+          <>
+            <span className="text-red-600">Couldn&apos;t generate a description.</span>
+            <button className={button} onClick={prose.retry}>
+              Retry
+            </button>
+          </>
+        )}
+        {prose.status === "limit" && (
+          <span className="opacity-70">Generation limit reached for this session.</span>
+        )}
+      </div>
 
       <p
         role="status"
@@ -163,7 +184,10 @@ export default function GameView({ initialState, world }: GameViewProps) {
         ))}
       </div>
 
-      <p className="mt-8 text-xs opacity-50">
+      <p className="mt-8 text-xs opacity-50" data-testid="generations-left">
+        AI generations left: {prose.remaining} / {MAX_GENERATIONS_PER_SESSION}
+      </p>
+      <p className="mt-2 text-xs opacity-50">
         <Link href="/worlds" className="underline">
           Saved worlds
         </Link>

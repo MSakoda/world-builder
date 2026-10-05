@@ -47,6 +47,8 @@ export const runs = pgTable('runs', {
     flags: jsonb("flags").notNull(),
     started_at: timestamp("started_at").notNull().defaultNow(),
     last_action_at: timestamp("last_action_at").notNull().defaultNow(),
+    // Model calls this session has used; capped server-side in lib/ai/generationQuota.ts.
+    generation_count: integer("generation_count").notNull().default(0),
 })
 
 export const worlds = pgTable("worlds", {
