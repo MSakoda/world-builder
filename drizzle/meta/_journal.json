@@ -29,6 +29,13 @@
       "when": 1791238365583,
       "tag": "0003_greedy_marvel_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791242373917,
+      "tag": "0004_parched_serpent_society",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,7 @@ import { getOrCreateSessionId } from "../../../../lib/session";
 import { PROSE_MODEL, buildPrompt, roomProseSchema } from "../../../../lib/ai/generateRoomProse";
 import { classifyProviderError } from "../../../../lib/ai/providerErrors";
 import { STREAM_END } from "../../../../lib/ai/streamProtocol";
+import { acquireGenerationLock, releaseGenerationLock } from "../../../../lib/ai/generationLock";
 import {
   MAX_GENERATIONS_PER_SESSION,
   releaseGeneration,
@@ -34,11 +35,6 @@ const streamHeaders = (remaining: number) => ({
 // When the provider says it's rate limiting us, stop sending it traffic until
 // the delay passes. Per server instance, which is enough to avoid hammering it.
 let providerBusyUntil = 0;
-
-// Generations currently running, by room. A second request for the same room
-// (a Stop then Retry, two players arriving together) waits for the running one
-// instead of starting, and paying for, another model call.
-const inFlight = new Map<string, Promise<void>>();
 
 function busyResponse(retryAfterSeconds: number, remaining: number) {
   return Response.json(
@@ -83,26 +79,33 @@ export async function GET(request: Request) {
   const sessionId = await getOrCreateSessionId();
   await getOrCreateRun(sessionId);
 
-  let cached = await latestProse(room.id);
-  if (!cached) {
-    const running = inFlight.get(room.id);
-    if (running) {
-      // Bounded wait, so a stuck generation can never hang this request.
-      await Promise.race([running, sleep(GENERATION_TIMEOUT_MS + 5_000)]);
-      cached = await latestProse(room.id);
+  // Exactly one request generates a given room; the rest wait for its result.
+  // The lock lives in the database, so this holds across server instances.
+  let hasLock = false;
+  const deadline = Date.now() + GENERATION_TIMEOUT_MS + 5_000;
+  for (;;) {
+    const cached = await latestProse(room.id);
+    if (cached) {
+      if (hasLock) await releaseGenerationLock(room.id);
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(cached.prose + STREAM_END));
+          controller.close();
+        },
+      });
+      return new Response(body, { headers: streamHeaders(await remainingGenerations(sessionId)) });
     }
+    if (hasLock || (hasLock = await acquireGenerationLock(room.id))) break;
+    if (Date.now() > deadline) {
+      return Response.json({ code: "model_error", error: "Timed out waiting." }, { status: 502 });
+    }
+    await sleep(400);
   }
-  if (cached) {
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(encoder.encode(cached.prose + STREAM_END));
-        controller.close();
-      },
-    });
-    return new Response(body, { headers: streamHeaders(await remainingGenerations(sessionId)) });
-  }
+  // From here this request owns the generation; the lock must always be released.
+  const unlock = () => releaseGenerationLock(room.id).catch(() => {});
 
   if (Date.now() < providerBusyUntil) {
+    await unlock();
     return busyResponse(
       Math.ceil((providerBusyUntil - Date.now()) / 1000),
       await remainingGenerations(sessionId),
@@ -111,6 +114,7 @@ export async function GET(request: Request) {
 
   const remaining = await reserveGeneration(sessionId);
   if (remaining === null) {
+    await unlock();
     return Response.json(
       {
         code: "session_limit",
@@ -119,19 +123,6 @@ export async function GET(request: Request) {
       { status: 429, headers: { "X-Generations-Remaining": "0" } },
     );
   }
-
-  // Visible to other requests from here until generation succeeds or fails.
-  let endFlight: () => void = () => {};
-  const flight = new Promise<void>((resolve) => {
-    endFlight = () => {
-      clearTimeout(safety);
-      if (inFlight.get(room.id) === flight) inFlight.delete(room.id);
-      resolve();
-    };
-  });
-  // Backstop in case an unexpected throw skips endFlight.
-  const safety = setTimeout(() => endFlight(), GENERATION_TIMEOUT_MS + 10_000);
-  inFlight.set(room.id, flight);
 
   let settled = false; // true once the prose is saved or the slot is refunded
   const release = async () => {
@@ -144,7 +135,7 @@ export async function GET(request: Request) {
     const failure = classifyProviderError(error);
     if (failure.kind === "busy") providerBusyUntil = Date.now() + failure.retryAfterSeconds * 1000;
     await release();
-    endFlight();
+    await unlock();
     return failure;
   };
 
@@ -234,7 +225,7 @@ export async function GET(request: Request) {
         referenced_items: final.referencedItems,
       });
       settled = true;
-      endFlight();
+      await unlock();
       push(STREAM_END);
     } catch (err) {
       console.error("prose stream failed:", err);

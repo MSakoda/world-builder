@@ -68,3 +68,10 @@ export const generations = pgTable("generations", {
     referenced_items: jsonb("referenced_items").notNull(),
     created_at: timestamp("created_at").notNull().defaultNow(),
 })
+
+// One row per room while a prose generation is running. The primary key makes
+// "who generates this room?" an atomic decision across server instances.
+export const generation_locks = pgTable("generation_locks", {
+    room_id: text("room_id").primaryKey().references(() => rooms.id),
+    started_at: timestamp("started_at").notNull().defaultNow(),
+})
