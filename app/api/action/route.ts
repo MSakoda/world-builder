@@ -6,6 +6,7 @@ import { getOrCreateSessionId } from "../../../lib/session";
 import { getOrCreateRun } from "../../../lib/db/getOrCreateRun";
 import { applyAction } from "../../../lib/engine/applyAction";
 import type { Action, GameState } from "../../../lib/engine/types";
+import { generateRoomProse } from "@/lib/ai/generateRoomProse";
 
 export async function POST(request: Request) {
   const action = (await request.json()) as Action;
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
     }).where(eq(runs.id, locked.id))
   // 5. Return { result, state } from the transaction callback, and
   //    respond with Response.json(...) using what the transaction gave back.
+  await generateRoomProse(world.rooms[result.state.currentRoom])
   return { result: result.result, state: result.state };
   });
   return Response.json(txResult);

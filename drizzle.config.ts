@@ -1,6 +1,9 @@
 import { defineConfig } from "drizzle-kit";
 
-process.loadEnvFile(".env.local");
+import { existsSync } from "node:fs";
+
+// On Vercel the vars come from the project settings; there is no .env.local.
+if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 
 export default defineConfig({
   schema: "./lib/db/schema.ts",

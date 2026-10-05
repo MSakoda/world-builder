@@ -48,3 +48,21 @@ export const runs = pgTable('runs', {
     started_at: timestamp("started_at").notNull().defaultNow(),
     last_action_at: timestamp("last_action_at").notNull().defaultNow(),
 })
+
+export const worlds = pgTable("worlds", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    created_at: timestamp("created_at").notNull().defaultNow(),
+})
+
+// Cached AI room prose (M5). One row per model call, so the latest row
+// for a room is what the game shows.
+export const generations = pgTable("generations", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    room_id: text("room_id").notNull().references(() => rooms.id),
+    model: text("model").notNull(),
+    prose: text("prose").notNull(),
+    mood: text("mood").notNull(),
+    referenced_items: jsonb("referenced_items").notNull(),
+    created_at: timestamp("created_at").notNull().defaultNow(),
+})

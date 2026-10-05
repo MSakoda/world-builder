@@ -3,6 +3,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { GameState, World, Action, ActionResult, Direction } from "../lib/engine/types";
 import { applyAction } from "@/lib/engine/applyAction";
+import { generateRoomProse } from "@/lib/ai/generateRoomProse";
+import { useEffect } from "react";
 
 type ActionResponse = { result: ActionResult; state: GameState };
 
@@ -39,6 +41,12 @@ export default function GameView({ initialState, world }: GameViewProps) {
   //    Render room.title, room.description, and each item id in
   //    state.inventory via world.items[id].name.
   const room = world.rooms[state.currentRoom];
+
+  useEffect(() => {
+    generateRoomProse(room);
+  }, [])
+
+  
 
   // 3. useMutation for POST /api/action:
   //      const mutation = useMutation({
