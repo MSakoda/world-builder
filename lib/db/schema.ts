@@ -54,11 +54,6 @@ export const runs = pgTable('runs', {
     generation_count: integer("generation_count").notNull().default(0),
 })
 
-export const worlds = pgTable("worlds", {
-    id: uuid("id").defaultRandom().primaryKey(),
-    name: text("name").notNull(),
-    created_at: timestamp("created_at").notNull().defaultNow(),
-})
 
 // Cached AI room prose (M5). One row per model call, so the latest row
 // for a room is what the game shows.

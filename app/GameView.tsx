@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DIRECTIONS, type GameState, type World, type Action, type ActionResult, type Exit } from "../lib/engine/types";
 import { MAX_GENERATIONS_PER_SESSION } from "../lib/ai/limits";
@@ -240,11 +239,6 @@ export default function GameView({ initialState, world, initialRemaining }: Game
         >
           Start over
         </button>
-      </p>
-      <p className="mt-2 text-xs opacity-50">
-        <Link href="/worlds" className="underline">
-          Saved worlds
-        </Link>
       </p>
     </div>
   );

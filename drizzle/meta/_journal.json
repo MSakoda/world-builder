@@ -43,6 +43,13 @@
       "when": 1791260968813,
       "tag": "0005_flaky_valeria_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791261715397,
+      "tag": "0006_quick_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }
