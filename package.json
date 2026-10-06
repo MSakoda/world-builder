@@ -12,7 +12,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx --env-file=.env.local lib/db/seed.ts"
+    "db:seed": "tsx --env-file=.env.local lib/db/seed.ts",
+    "test:e2e": "playwright test",
+    "db:prose": "tsx --env-file=.env.local lib/db/pregenerate.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.87",
@@ -27,13 +29,17 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
+    "jsdom": "^30.1.2",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5",

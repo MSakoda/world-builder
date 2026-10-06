@@ -52,6 +52,8 @@ export function useRoomProse(roomId: string, initialRemaining: number) {
           }
           if (res.status === 503 && body.code === "provider_busy") {
             const seconds = Number(body.retryAfter ?? res.headers.get("Retry-After")) || 30;
+            // Start the countdown from the moment the limit arrived, not from mount.
+            if (!controller.signal.aborted) setNow(Date.now());
             return update({ roomId, text: "", status: "busy", retryAt: Date.now() + seconds * 1000 });
           }
           return update({

@@ -10,6 +10,7 @@ import { getOrCreateSessionId } from "../../../../lib/session";
 import { PROSE_MODEL, buildPrompt, roomProseSchema } from "../../../../lib/ai/generateRoomProse";
 import { classifyProviderError } from "../../../../lib/ai/providerErrors";
 import { STREAM_END } from "../../../../lib/ai/streamProtocol";
+import { saveGeneration } from "../../../../lib/ai/saveGeneration";
 import { acquireGenerationLock, releaseGenerationLock } from "../../../../lib/ai/generationLock";
 import {
   MAX_GENERATIONS_PER_SESSION,
@@ -217,13 +218,7 @@ export async function GET(request: Request) {
       }
       // Throws if the model failed mid-stream or the object doesn't match the schema.
       const final = await result.output;
-      await db.insert(generations).values({
-        room_id: room.id,
-        model: PROSE_MODEL,
-        prose: final.prose,
-        mood: final.mood,
-        referenced_items: final.referencedItems,
-      });
+      await saveGeneration(room.id, PROSE_MODEL, final);
       settled = true;
       await unlock();
       push(STREAM_END);
