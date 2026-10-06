@@ -1,5 +1,7 @@
 import type { Action, ActionResult, GameState, World } from "./types";
 
+const fail = (message: string): ActionResult => ({ success: false, message });
+
 /**
  * Pure. Given a state, an action, and the world, return the NEW state and
  * a result describing what happened. Never mutate `state` — always build
@@ -10,75 +12,92 @@ export function applyAction(
   action: Action,
   world: World
 ): { state: GameState; result: ActionResult } {
-  // implement. Handle "go", "take", "use", "look".
-  const updatedState = {...state};
-    let result : ActionResult = {
-    success: true,
-    message: ''
-  }
-  const room = world.rooms[state.currentRoom]
-  switch(action.verb) {
-    case 'go':
-      // check if room exists in direction
-      if( room.exits[action.direction]) {
-        // check if room has requiredItem
-        const requiredItem = room.exits[action.direction]?.requiredItem
-        if( requiredItem ) {
-          if ( state.inventory.includes(requiredItem) ) { // Do you have the item?
-            result.message = `Went to ${room.exits[action.direction]!.to}`;
-            updatedState.currentRoom = room.exits[action.direction]!.to
-          } else {
-            result = {
-              success: false,
-              message: `${world.items[requiredItem].name} is required to go ${action.direction}`
-            }
-          }
-        } else {
-          result.message = `Went to ${room.exits[action.direction]?.to}`;
-          updatedState.currentRoom = room.exits[action.direction]!.to
-        }   
-      } else {
-        result = {
-          success: false,
-          message: `There is no exit to the ${action.direction}`
-        }
+  const room = world.rooms[state.currentRoom];
+
+  switch (action.verb) {
+    case "go": {
+      const exit = room.exits[action.direction];
+      if (!exit) return { state, result: fail(`There is no exit to the ${action.direction}`) };
+
+      if (exit.requiredItem && !state.inventory.includes(exit.requiredItem)) {
+        const name = world.items[exit.requiredItem]?.name ?? exit.requiredItem;
+        return {
+          state,
+          result: fail(exit.lockedMessage ?? `${name} is required to go ${action.direction}`),
+        };
       }
-      break;
-    case 'take': {
-      const item = world.items[action.target];
-      if (!item) {
-        result = { success: false, message: `There is no ${action.target} here.` };
-      } else if (!room.items.includes(action.target)) {
-        result = { success: false, message: `${item.name} does not exist in this room.` };
-      } else if (updatedState.inventory.includes(action.target)) {
-        result = { success: false, message: `You already have ${item.name}` };
-      } else if (!item.portable) {
-        result = { success: false, message: `${item.name} is not portable.  You could not add it to your inventory.` };
-      } else {
-        updatedState.inventory = [...updatedState.inventory, action.target];
-        result.message = `Added ${item.name} to inventory.`;
+      if (exit.requiredFlag && !state.flags[exit.requiredFlag]) {
+        return { state, result: fail(exit.lockedMessage ?? "Something blocks the way.") };
       }
-      break;
+
+      const target = world.rooms[exit.to];
+      if (target.ending) {
+        return {
+          state: { ...state, currentRoom: exit.to, flags: { ...state.flags, won: true } },
+          result: { success: true, message: `Went to ${target.title}. You win!` },
+        };
+      }
+      return {
+        state: { ...state, currentRoom: exit.to },
+        result: { success: true, message: `Went to ${target.title}` },
+      };
     }
-    case 'use': {
+
+    case "take": {
       const item = world.items[action.target];
-      if (!item) {
-        result = { success: false, message: `There is no ${action.target} here.` };
-      } else if (!state.inventory.includes(action.target)) {
-        result = { success: false, message: `You don't have ${item.name}.` };
-      } else {
-        // v1 has no item effects: exits unlock just by carrying the key.
-        result.message = `You use the ${item.name}, but nothing happens.`;
+      if (!item) return { state, result: fail(`There is no ${action.target} here.`) };
+      if (!room.items.includes(action.target)) {
+        return { state, result: fail(`${item.name} does not exist in this room.`) };
       }
-      break;
+      if (state.inventory.includes(action.target)) {
+        return { state, result: fail(`You already have ${item.name}`) };
+      }
+      if (!item.portable) {
+        return {
+          state,
+          result: fail(`${item.name} is not portable.  You could not add it to your inventory.`),
+        };
+      }
+      return {
+        state: { ...state, inventory: [...state.inventory, action.target] },
+        result: { success: true, message: `Added ${item.name} to inventory.` },
+      };
     }
-    case 'look':
-      // return description of current room
-      result.message = room.description;
-      break;
+
+    case "use": {
+      const item = world.items[action.target];
+      if (!item) return { state, result: fail(`There is no ${action.target} here.`) };
+      if (!state.inventory.includes(action.target)) {
+        return { state, result: fail(`You don't have ${item.name}.`) };
+      }
+      const interaction = world.interactions.find(
+        (i) => i.roomId === state.currentRoom && i.itemId === action.target,
+      );
+      if (!interaction) {
+        return {
+          state,
+          result: { success: true, message: `You use the ${item.name}, but nothing happens.` },
+        };
+      }
+      if (state.flags[interaction.flag]) {
+        return { state, result: { success: true, message: "Nothing more happens." } };
+      }
+      return {
+        state: {
+          ...state,
+          flags: { ...state.flags, [interaction.flag]: true },
+          inventory: interaction.consume
+            ? state.inventory.filter((id) => id !== action.target)
+            : state.inventory,
+        },
+        result: { success: true, message: interaction.message },
+      };
+    }
+
+    case "look":
+      return { state, result: { success: true, message: room.description } };
+
     default:
-      result = { success: false, message: "I don't understand that." };
-      break;
+      return { state, result: fail("I don't understand that.") };
   }
-  return { state: updatedState, result }
 }

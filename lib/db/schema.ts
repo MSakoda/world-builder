@@ -6,7 +6,8 @@ import { pgTable, text, boolean, integer, primaryKey, uuid, jsonb, timestamp } f
 export const rooms = pgTable("rooms", {
     id: text("id").primaryKey(),
     title: text('title').notNull(),
-    description: text('description').notNull()
+    description: text('description').notNull(),
+    is_ending: boolean('is_ending').notNull().default(false),
 })
 
 // items:      id (text pk, e.g. "key"), name, portable (boolean)
@@ -35,7 +36,9 @@ export const exits = pgTable('exits', {
     from_room_id: text('from_room_id').notNull().references(() => rooms.id),
     direction: text('direction').notNull(),
     to_room_id: text('to_room_id').notNull().references(() => rooms.id),
-    required_item: text('required_item').references(() => items.id)
+    required_item: text('required_item').references(() => items.id),
+    required_flag: text('required_flag'),
+    locked_message: text('locked_message'),
 })
 // Reference for fk/pk syntax: node_modules/drizzle-orm/pg-core (or the
 // Drizzle docs) for `.references(() => otherTable.column)`.
@@ -74,4 +77,14 @@ export const generations = pgTable("generations", {
 export const generation_locks = pgTable("generation_locks", {
     room_id: text("room_id").primaryKey().references(() => rooms.id),
     started_at: timestamp("started_at").notNull().defaultNow(),
+})
+
+// Using item_id in room_id sets flag (and optionally consumes the item).
+export const interactions = pgTable("interactions", {
+    id: text("id").primaryKey(),
+    room_id: text("room_id").notNull().references(() => rooms.id),
+    item_id: text("item_id").notNull().references(() => items.id),
+    flag: text("flag").notNull(),
+    message: text("message").notNull(),
+    consume: boolean("consume").notNull().default(false),
 })

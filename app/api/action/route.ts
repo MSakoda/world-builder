@@ -5,15 +5,13 @@ import { loadWorld } from "../../../lib/db/loadWorld";
 import { getOrCreateSessionId } from "../../../lib/session";
 import { getOrCreateRun } from "../../../lib/db/getOrCreateRun";
 import { applyAction } from "../../../lib/engine/applyAction";
-import type { Action, GameState } from "../../../lib/engine/types";
-
-const DIRECTIONS = ["north", "south"];
+import { DIRECTIONS, type Action, type Direction, type GameState } from "../../../lib/engine/types";
 
 function parseAction(body: unknown): Action {
   const b = body as Record<string, unknown>;
   if (b?.verb === "look") return { verb: "look" };
-  if (b?.verb === "go" && DIRECTIONS.includes(b.direction as string))
-    return { verb: "go", direction: b.direction as "north" | "south" };
+  if (b?.verb === "go" && (DIRECTIONS as readonly unknown[]).includes(b.direction))
+    return { verb: "go", direction: b.direction as Direction };
   if ((b?.verb === "take" || b?.verb === "use") && typeof b.target === "string")
     return { verb: b.verb, target: b.target };
   throw new Error("invalid action");

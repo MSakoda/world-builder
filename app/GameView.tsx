@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { GameState, World, Action, ActionResult, Direction } from "../lib/engine/types";
+import { DIRECTIONS, type GameState, type World, type Action, type ActionResult, type Exit } from "../lib/engine/types";
 import { MAX_GENERATIONS_PER_SESSION } from "../lib/ai/limits";
 import { useRoomProse } from "./useRoomProse";
 import { applyAction } from "@/lib/engine/applyAction";
@@ -73,14 +73,37 @@ export default function GameView({ initialState, world, initialRemaining }: Game
     },
   });
 
+  const restart = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/restart", { method: "POST" });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      return (await res.json()) as { state: GameState };
+    },
+    onSuccess: ({ state }) => {
+      queryClient.setQueryData(GAME_STATE_KEY, state);
+      setFeedback({ text: "You start over at the entrance.", ok: true });
+    },
+    onError: () => setFeedback({ text: "Couldn't restart. Please try again.", ok: false }),
+  });
+
   const act = (action: Action) => mutation.mutate(action);
-  const busy = mutation.isPending;
+  const busy = mutation.isPending || restart.isPending;
   const itemName = (id: string) => world.items[id]?.name ?? id;
 
-  const exits = Object.entries(room.exits) as [
-    Direction,
-    { to: string; requiredItem?: string },
-  ][];
+  // Show exits in a stable compass order, and mark the ones that are still blocked.
+  const exits = DIRECTIONS.flatMap((direction) => {
+    const exit = room.exits[direction];
+    return exit ? [[direction, exit] as const] : [];
+  });
+  const lockHint = (exit: Exit) => {
+    if (exit.requiredItem && !state.inventory.includes(exit.requiredItem)) {
+      return exit.lockedMessage ?? `Requires ${itemName(exit.requiredItem)}`;
+    }
+    if (exit.requiredFlag && !state.flags[exit.requiredFlag]) {
+      return exit.lockedMessage ?? "Something blocks the way.";
+    }
+    return null;
+  };
 
   return (
     <div className="text-center mt-5">
@@ -136,6 +159,15 @@ export default function GameView({ initialState, world, initialRemaining }: Game
         {feedback?.text}
       </p>
 
+      {state.flags.won && (
+        <div role="status" className="mt-3 border rounded px-3 py-2 max-w-prose mx-auto">
+          <p className="font-medium">You lit the beacon. Emberhold is bright again — you win!</p>
+          <button className={`${button} mt-2`} disabled={busy} onClick={() => restart.mutate()}>
+            Play again
+          </button>
+        </div>
+      )}
+
       <div className="mt-2">
         <button className={button} disabled={busy} onClick={() => act({ verb: "look" })}>
           Look around
@@ -145,17 +177,17 @@ export default function GameView({ initialState, world, initialRemaining }: Game
       <h3 className="mt-5 text-sm">Exits:</h3>
       <div className="mt-2 flex justify-center gap-2">
         {exits.map(([direction, exit]) => {
-          const locked = !!exit.requiredItem && !state.inventory.includes(exit.requiredItem);
+          const hint = lockHint(exit);
           return (
             <button
               key={direction}
               className={button}
               disabled={busy}
-              title={locked ? `Requires ${itemName(exit.requiredItem!)}` : undefined}
+              title={hint ?? undefined}
               onClick={() => act({ verb: "go", direction })}
             >
               {direction}
-              {locked && " (locked)"}
+              {hint && " (locked)"}
             </button>
           );
         })}
@@ -197,6 +229,17 @@ export default function GameView({ initialState, world, initialRemaining }: Game
 
       <p className="mt-8 text-xs opacity-50" data-testid="generations-left">
         AI generations left: {prose.remaining} / {MAX_GENERATIONS_PER_SESSION}
+      </p>
+      <p className="mt-4 text-xs">
+        <button
+          className="underline opacity-50 cursor-pointer disabled:cursor-not-allowed"
+          disabled={busy}
+          onClick={() => {
+            if (window.confirm("Start over? You will lose your progress.")) restart.mutate();
+          }}
+        >
+          Start over
+        </button>
       </p>
       <p className="mt-2 text-xs opacity-50">
         <Link href="/worlds" className="underline">

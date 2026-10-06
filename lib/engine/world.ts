@@ -24,6 +24,7 @@ export const world: World = {
       },
     },
   },
+  interactions: [],
   items: {
     key: { id: "key", name: "brass key", portable: true },
     statue: { id: "statue", name: "stone statue", portable: false },

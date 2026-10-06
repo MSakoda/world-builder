@@ -36,6 +36,13 @@
       "when": 1791242373917,
       "tag": "0004_parched_serpent_society",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791260968813,
+      "tag": "0005_flaky_valeria_richards",
+      "breakpoints": true
     }
   ]
 }
